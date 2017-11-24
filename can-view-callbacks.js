@@ -55,6 +55,43 @@ var attributes = {},
 	regExpAttributes = [],
 	automaticCustomElementCharacters = /[-\:]/;
 var defaultCallback = function () {};
+var tagHandler = function(el, tagName, tagData){
+		var helperTagCallback = tagData.options.get('tags.' + tagName,{proxyMethods: false}),
+			tagCallback = helperTagCallback || tags[tagName];
+
+		// If this was an element like <foo-bar> that doesn't have a component, just render its content
+		var scope = tagData.scope,
+			res;
+
+		if(tagCallback) {
+			res = Observation.ignore(tagCallback)(el, tagData);
+		} else {
+			res = scope;
+		}
+
+		//!steal-remove-start
+		if (!tagCallback) {
+			var GLOBAL = getGlobal();
+			var ceConstructor = GLOBAL.document.createElement(tagName).constructor;
+			// If not registered as a custom element, the browser will use default constructors
+			if (ceConstructor === GLOBAL.HTMLElement || ceConstructor === GLOBAL.HTMLUnknownElement) {
+				dev.warn('can-view-callbacks: No custom element found for ' + tagName);	
+			}
+		}
+		//!steal-remove-end
+
+		// If the tagCallback gave us something to render with, and there is content within that element
+		// render it!
+		if (res && tagData.subtemplate) {
+
+			if (scope !== res) {
+				scope = scope.add(res);
+			}
+			var result = tagData.subtemplate(scope, tagData.options);
+			var frag = typeof result === "string" ? can.view.frag(result) : result;
+			domMutate.appendChild.call(el, frag);
+		}
+	}
 
 var tag = function (tagName, tagHandler) {
 	if(tagHandler) {
@@ -103,43 +140,7 @@ var callbacks = {
 	tag: tag,
 	attr: attr,
 	// handles calling back a tag callback
-	tagHandler: function(el, tagName, tagData){
-		var helperTagCallback = tagData.options.get('tags.' + tagName,{proxyMethods: false}),
-			tagCallback = helperTagCallback || tags[tagName];
-
-		// If this was an element like <foo-bar> that doesn't have a component, just render its content
-		var scope = tagData.scope,
-			res;
-
-		if(tagCallback) {
-			res = Observation.ignore(tagCallback)(el, tagData);
-		} else {
-			res = scope;
-		}
-
-		//!steal-remove-start
-		if (!tagCallback) {
-			var GLOBAL = getGlobal();
-			var ceConstructor = GLOBAL.document.createElement(tagName).constructor;
-			// If not registered as a custom element, the browser will use default constructors
-			if (ceConstructor === GLOBAL.HTMLElement || ceConstructor === GLOBAL.HTMLUnknownElement) {
-				dev.warn('can-view-callbacks: No custom element found for ' + tagName);	
-			}
-		}
-		//!steal-remove-end
-
-		// If the tagCallback gave us something to render with, and there is content within that element
-		// render it!
-		if (res && tagData.subtemplate) {
-
-			if (scope !== res) {
-				scope = scope.add(res);
-			}
-			var result = tagData.subtemplate(scope, tagData.options);
-			var frag = typeof result === "string" ? can.view.frag(result) : result;
-			domMutate.appendChild.call(el, frag);
-		}
-	}
+	tagHandler
 };
 
 namespace.view = namespace.view || {};
